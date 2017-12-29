@@ -89,3 +89,41 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+int 
+sys_lsproc(void){
+	cprintf("lsproc in sysproc.c\n");
+	lsproc();
+	return 0;
+}
+
+int 
+sys_suspend(void){
+	cprintf("suspend in sysproc.c\n");
+	suspend();
+	return 0;
+}
+
+int 
+sys_pmwakeup(void){
+	cprintf("pmwakeup in sysproc.c\n");
+	pmwakeup();
+	return 0;
+}
+
+
+int 
+sys_halt(void){
+	cprintf("halt in sysproc.c\n");
+
+	/*char *p = "Shutdown";
+	for( ; *p; p++)
+		outb(0x8900, *p);
+	return 0;*/
+
+	char *p = "Shutdown";
+	for( ; *p; p++)
+		outw(0xB004, 0x2000);
+	return 0;
+}
+

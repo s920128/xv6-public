@@ -174,6 +174,12 @@ UPROGS=\
 	_usertests\
 	_wc\
 	_zombie\
+	_lsproc\
+	_suspend\
+	_pmwakeup\
+	_halt\
+	_foo\
+
 
 fs.img: mkfs README $(UPROGS)
 	./mkfs fs.img README $(UPROGS)

@@ -7,6 +7,7 @@
 #include "proc.h"
 #include "spinlock.h"
 
+
 struct {
   struct spinlock lock;
   struct proc proc[NPROC];
@@ -88,6 +89,7 @@ allocproc(void)
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
+  p->priority=10;
 
   release(&ptable.lock);
 
@@ -323,6 +325,7 @@ void
 scheduler(void)
 {
   struct proc *p;
+struct proc *p2;
   struct cpu *c = mycpu();
   c->proc = 0;
   
@@ -332,10 +335,28 @@ scheduler(void)
 
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
+
+struct proc *highproc=0;
+for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if(p->state != RUNNABLE)
+        continue;
+	highproc=p;
+break;
+}
+
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->state != RUNNABLE)
         continue;
-
+	highproc=p;
+	for(p2=ptable.proc; p2 < &ptable.proc[NPROC]; p2++){
+		if(p2->state != RUNNABLE)
+		continue;
+		if(p2->pid==1||p2->pid==2){highproc=p2;break;}
+		if(highproc->priority>p2->priority)
+		highproc=p2;
+	}
+//cprintf("scheduling!\n");
+	p=highproc;
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
@@ -349,9 +370,9 @@ scheduler(void)
       // Process is done running for now.
       // It should have changed its p->state before coming back.
       c->proc = 0;
+	break;
     }
     release(&ptable.lock);
-
   }
 }
 
@@ -496,6 +517,8 @@ kill(int pid)
   return -1;
 }
 
+
+
 //PAGEBREAK: 36
 // Print a process listing to console.  For debugging.
 // Runs when user types ^P on console.
@@ -511,6 +534,7 @@ procdump(void)
   [RUNNING]   "run   ",
   [ZOMBIE]    "zombie"
   };
+
   int i;
   struct proc *p;
   char *state;
@@ -532,3 +556,142 @@ procdump(void)
     cprintf("\n");
   }
 }
+
+int
+lsproc(void)
+{
+	struct proc *p;
+	cprintf("lsproc in proc.c\n");
+	acquire(&ptable.lock);
+	for(p = ptable.proc;p<&ptable.proc[NPROC];p++)
+	{
+		if(p->state != UNUSED){
+			cprintf("%d\t%s\t%d\t",p->pid,p->name,p->priority);
+			printfstate(p);
+			cprintf("\n");	
+		}
+	}
+    	release(&ptable.lock);
+
+	return 0;
+}
+
+int 
+suspend(void)
+{
+
+	extern int suspend_flag;
+	suspend_flag=1;
+	struct proc *curproc = myproc();
+	struct spinlock *lk = &ptable.lock;
+	struct proc *p;
+
+	cprintf("suspend in proc.c\n");
+	acquire(lk);
+	for(p = ptable.proc;p<&ptable.proc[NPROC];p++)
+	{
+	  	if(lk != &ptable.lock){  //DOC: sleeplock0
+			acquire(&ptable.lock);  //DOC: sleeplock1
+			release(lk);
+		}
+		if(p->pid==2){
+			p->priority=0;
+		}
+
+		if(p->state != UNUSED&&p->pid!=2){
+			cprintf("pid:%d ,name:%s from ",p->pid,p->name);
+			printfstate(p);
+
+			if(p->state != SLEEPING){
+			  	//sleep(curproc,&ptable.lock);
+				p->chan = curproc->chan;
+				p->lstate=p->state;
+				p->state = SLEEPING;
+				//sched();
+				//p->chan = 0;
+			}
+			cprintf(" to ");
+
+			printfstate(p);
+			cprintf("\n");	
+
+		}
+	  	if(lk != &ptable.lock){  //DOC: sleeplock2
+			release(&ptable.lock);
+			acquire(lk);
+		}
+	}
+	//sched();
+    	release(lk);
+	cprintf("Already suspend!!\n");
+
+	return 0;
+}
+
+int 
+pmwakeup(void)
+{
+	//struct proc *curproc = myproc();
+	struct spinlock *lk = &ptable.lock;
+	//struct cpu *c = mycpu();
+	struct proc *p;
+	cprintf("pmwakeup in proc.c\n");
+	
+	acquire(lk);
+	for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+	  	if(lk != &ptable.lock){  //DOC: sleeplock0
+			acquire(&ptable.lock);  //DOC: sleeplock1
+			release(lk);
+		}
+
+		if(p->state != UNUSED && p->pid != 0){
+			if(p->pid == 2||p->pid == 1)//sh/init
+			{
+				//p->state = RUNNING;
+				//p->chan = 0;
+				continue;
+			}
+			if(p->state == SLEEPING 
+				
+			){
+				cprintf("%d wakeup!\n",p->pid);
+				//p->state = RUNNABLE;
+				p->state=p->lstate;
+				//p->chan = 0;
+				//break;
+			}
+		}
+	  	if(lk != &ptable.lock){  //DOC: sleeplock2
+			release(&ptable.lock);
+			acquire(lk);
+		}
+	}
+    	release(lk);
+	lsproc();
+	return 0;
+}
+
+void printfstate(struct proc *p){
+	if(p->state == EMBRYO)
+	{
+		cprintf("embryo");
+	}
+	else if(p->state == SLEEPING)
+	{
+		cprintf("sleep ");
+	}
+	else if(p->state == RUNNABLE)
+	{
+		cprintf("runnable");
+	}
+	else if(p->state == RUNNING)
+	{
+		cprintf("run   ");
+	}	
+	else if(p->state == ZOMBIE)
+	{
+		cprintf("zombie");
+	}
+}
+
+
